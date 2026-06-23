@@ -34,7 +34,9 @@ async def main():
     # --- Middleware ---
     from database.connection import async_session
     from bot.middlewares.db import DbSessionMiddleware
+    from bot.middlewares.user import UserMiddleware
     dp.update.middleware(DbSessionMiddleware(session_pool=async_session))
+    dp.update.middleware(UserMiddleware())
 
     # --- Global Error Handler ---
     @dp.error()

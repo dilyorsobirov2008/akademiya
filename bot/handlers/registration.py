@@ -61,16 +61,11 @@ def get_role_keyboard():
 
 # ==================== /start ====================
 @router.message(CommandStart())
-async def cmd_start(message: types.Message, state: FSMContext, session: AsyncSession):
-    # Check if user already registered
-    stmt = select(User).where(User.id == message.from_user.id)
-    result = await session.execute(stmt)
-    existing_user = result.scalar_one_or_none()
-
-    if existing_user:
+async def cmd_start(message: types.Message, state: FSMContext, db_user: User = None):
+    if db_user:
         await message.answer(
-            f"👋 Qayta xush kelibsiz, **{existing_user.full_name}**!\n\n"
-            f"Sizning maqomingiz: **{existing_user.role.value.capitalize()}**\n"
+            f"👋 Qayta xush kelibsiz, **{db_user.full_name}**!\n\n"
+            f"Sizning maqomingiz: **{db_user.role.value.capitalize()}**\n"
             "Quyidagi menyudan foydalaning:",
             reply_markup=get_main_menu(),
             parse_mode="Markdown"
