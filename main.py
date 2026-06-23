@@ -72,8 +72,9 @@ async def main():
 
     # --- Webhook or Polling ---
     webhook_url = os.getenv("WEBHOOK_URL")
-
+    logger.info(f"🔎 DEBUG: WEBHOOK_URL sozlanganmi? {'HA' if webhook_url else 'YOQ'}")
     if webhook_url:
+        logger.info(f"🔎 DEBUG: WEBHOOK_URL qiymati: {webhook_url}")
         from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
         host = os.getenv("WEB_SERVER_HOST", "0.0.0.0")
         port = int(os.getenv("PORT", os.getenv("WEB_SERVER_PORT", "8080")))
