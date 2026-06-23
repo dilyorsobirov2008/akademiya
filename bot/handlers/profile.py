@@ -1,10 +1,12 @@
 from aiogram import Router, types, F
 from database.models import User
 from sqlalchemy import select
+from aiogram.filters import Command
 
 router = Router()
 
-@router.message(F.text == "🏅 Karyera yo'li") # Using one of the menu buttons or we can add a new one
+@router.message(Command("profile"))
+@router.message(F.text == "🏅 Karyera yo'li") 
 async def show_profile(message: types.Message, session):
     stmt = select(User).where(User.id == message.from_user.id)
     result = await session.execute(stmt)
@@ -21,8 +23,9 @@ async def show_profile(message: types.Message, session):
         f"🏢 Filial: **{user.branch}**\n"
         f"📂 Bo'lim: **{user.department}**\n"
         f"👔 Lavozim: **{user.position}**\n"
-        f"📅 Ish boshlangan: **{user.hire_date}**\n"
+        f"📅 Ish boshlangan: **{user.hire_date.strftime('%d.%m.%Y') if user.hire_date else '—'}**\n"
         f"👨‍💼 Rahbar: **{user.manager_name}**\n"
+        f"👨‍🏫 Mentor: **{user.mentor_name if user.mentor_name else '—'}**\n"
         f"🚀 Maqomingiz: **{user.role.value.capitalize()}**"
     )
     
