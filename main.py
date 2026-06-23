@@ -1,16 +1,17 @@
 import asyncio
 import logging
 import os
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, types
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.webhook.urls import TokenObjectURL
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 from dotenv import load_dotenv
 
 from bot.handlers.registration import router as registration_router
 from bot.handlers.menu import router as menu_router
-from database.connection import init_db
+from bot.handlers.admin import router as admin_router
+from bot.middlewares.db import DbSessionMiddleware
+from database.connection import init_db, async_session
 from bot.utils.scheduler import scheduler
 
 load_dotenv()
@@ -21,8 +22,14 @@ async def main():
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
     )
     
-    # Initialize DB
-    # await init_db() # Uncomment this when DB URL is valid
+    # Register Middlewares
+    dp.update.middleware(DbSessionMiddleware(session_pool=async_session))
+    
+    # Global Error Handler
+    @dp.error()
+    async def global_error_handler(event: types.ErrorEvent):
+        logging.error(f"Critical error: {event.exception}", exc_info=True)
+        # You could notify admins here
     
     bot = Bot(token=os.getenv("BOT_TOKEN"))
     dp = Dispatcher(storage=MemoryStorage())
@@ -30,6 +37,13 @@ async def main():
     # Register routers
     dp.include_router(registration_router)
     dp.include_router(menu_router)
+    dp.include_router(admin_router)
+    
+    # Set bot commands
+    await bot.set_my_commands([
+        types.BotCommand(command="start", description="Botni qayta ishga tushirish"),
+        types.BotCommand(command="help", description="Yordam va qo'llanma")
+    ])
     
     # Start scheduler
     scheduler.start()
