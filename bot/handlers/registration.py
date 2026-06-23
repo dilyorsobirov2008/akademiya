@@ -1,9 +1,12 @@
 from aiogram import Router, types, F
 from aiogram.filters import CommandStart
-from aiogram.fsm.context import Context
+from aiogram.fsm.context import FSMContext
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from bot.states.registration import Registration
+from database.models import User, UserRole
+from sqlalchemy.ext.asyncio import AsyncSession
 import re
+from datetime import datetime
 
 router = Router()
 
@@ -15,7 +18,7 @@ def get_contact_keyboard():
     )
 
 @router.message(CommandStart())
-async def cmd_start(message: types.Message, state: Context):
+async def cmd_start(message: types.Message, state: FSMContext):
     await message.answer(
         "👋 **Assalomu alaykum!**\n\n"
         "Ichki Akademiya (Internal Academy) botiga xush kelibsiz.\n"
@@ -26,7 +29,7 @@ async def cmd_start(message: types.Message, state: Context):
     await state.set_state(Registration.full_name)
 
 @router.message(Registration.full_name)
-async def process_name(message: types.Message, state: Context):
+async def process_name(message: types.Message, state: FSMContext):
     await state.update_data(full_name=message.text)
     await message.answer(
         "📞 **Telefon raqamingizni yuboring:**\n"
@@ -37,7 +40,7 @@ async def process_name(message: types.Message, state: Context):
     await state.set_state(Registration.phone)
 
 @router.message(Registration.phone, F.contact | F.text)
-async def process_phone(message: types.Message, state: Context):
+async def process_phone(message: types.Message, state: FSMContext):
     phone = message.contact.phone_number if message.contact else message.text
     if not re.match(r'^\+?998\d{9}$', phone.replace(" ", "")):
          await message.answer("❌ Noto'g'ri format. Iltimos, +998XXXXXXXXX formatida kiriting.")
@@ -53,7 +56,7 @@ async def process_phone(message: types.Message, state: Context):
     await state.set_state(Registration.dob)
 
 @router.message(Registration.dob)
-async def process_dob(message: types.Message, state: Context):
+async def process_dob(message: types.Message, state: FSMContext):
     if not re.match(r'^\d{2}\.\d{2}\.\d{4}$', message.text):
         await message.answer("❌ Noto'g'ri format. KK.OO.YYYY formatida yozing.")
         return
@@ -66,7 +69,7 @@ async def process_dob(message: types.Message, state: Context):
     await state.set_state(Registration.branch)
 
 @router.message(Registration.branch)
-async def process_branch(message: types.Message, state: Context):
+async def process_branch(message: types.Message, state: FSMContext):
     await state.update_data(branch=message.text)
     await message.answer(
         "📂 **Bo'limingizni kiriting:**\n"
@@ -76,7 +79,7 @@ async def process_branch(message: types.Message, state: Context):
     await state.set_state(Registration.department)
 
 @router.message(Registration.department)
-async def process_dept(message: types.Message, state: Context):
+async def process_dept(message: types.Message, state: FSMContext):
     await state.update_data(department=message.text)
     await message.answer(
         "👔 **Lavozimingizni kiriting:**",
@@ -85,7 +88,7 @@ async def process_dept(message: types.Message, state: Context):
     await state.set_state(Registration.position)
 
 @router.message(Registration.position)
-async def process_position(message: types.Message, state: Context):
+async def process_position(message: types.Message, state: FSMContext):
     await state.update_data(position=message.text)
     await message.answer(
         "📅 **Ishga qabul qilingan sanangiz:**\n"
@@ -95,7 +98,7 @@ async def process_position(message: types.Message, state: Context):
     await state.set_state(Registration.hire_date)
 
 @router.message(Registration.hire_date)
-async def process_hire_date(message: types.Message, state: Context):
+async def process_hire_date(message: types.Message, state: FSMContext):
     if not re.match(r'^\d{2}\.\d{2}\.\d{4}$', message.text):
         await message.answer("❌ Noto'g'ri format. KK.OO.YYYY formatida yozing.")
         return
@@ -108,7 +111,7 @@ async def process_hire_date(message: types.Message, state: Context):
     await state.set_state(Registration.manager)
 
 @router.message(Registration.manager)
-async def process_manager(message: types.Message, state: Context):
+async def process_manager(message: types.Message, state: FSMContext):
     await state.update_data(manager=message.text)
     await message.answer(
         "👨‍🏫 **Mentoringiz (ustozingiz) ning F.I.Sh:**",
@@ -117,9 +120,34 @@ async def process_manager(message: types.Message, state: Context):
     await state.set_state(Registration.mentor)
 
 @router.message(Registration.mentor)
-async def process_mentor(message: types.Message, state: Context):
+async def process_mentor(message: types.Message, state: FSMContext, session: AsyncSession):
     data = await state.get_data()
-    # Here we would save to DB
+    
+    # Convert string dates to date objects
+    try:
+        dob_date = datetime.strptime(data['dob'], '%d.%m.%Y').date()
+        hire_date = datetime.strptime(data['hire_date'], '%d.%m.%Y').date()
+    except ValueError:
+        dob_date = None
+        hire_date = datetime.now().date()
+
+    # Save to DB
+    new_user = User(
+        id=message.from_user.id,
+        full_name=data['full_name'],
+        phone=data['phone'],
+        dob=dob_date,
+        branch=data['branch'],
+        department=data['department'],
+        position=data['position'],
+        hire_date=hire_date,
+        manager_name=data['manager'],
+        role=UserRole.TRAINEE
+    )
+    
+    session.add(new_user)
+    await session.commit()
+
     await message.answer(
         "✅ **Tabriklayman!**\n\n"
         "Siz muvaffaqiyatli ro'yxatdan o'tdingiz.\n"

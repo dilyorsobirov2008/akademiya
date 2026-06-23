@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from bot.handlers.registration import router as registration_router
 from bot.handlers.menu import router as menu_router
 from bot.handlers.admin import router as admin_router
+from bot.handlers.profile import router as profile_router
 from bot.middlewares.db import DbSessionMiddleware
 from database.connection import init_db, async_session
 from bot.utils.scheduler import scheduler
@@ -37,6 +38,7 @@ async def main():
     # Register routers
     dp.include_router(registration_router)
     dp.include_router(menu_router)
+    dp.include_router(profile_router)
     dp.include_router(admin_router)
     
     # Set bot commands
@@ -54,7 +56,8 @@ async def main():
     if webhook_url:
         # Webhook mode
         host = os.getenv("WEB_SERVER_HOST", "0.0.0.0")
-        port = int(os.getenv("WEB_SERVER_PORT", 8080))
+        # Render provides 'PORT' env var, we check both
+        port = int(os.getenv("PORT", os.getenv("WEB_SERVER_PORT", 8080)))
         
         await bot.set_webhook(url=webhook_url)
         
