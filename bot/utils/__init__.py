@@ -1,1 +1,1 @@
-# utils package
+# bot/utils/__init__.py
