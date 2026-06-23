@@ -117,14 +117,25 @@ async def process_mentor(message: types.Message, state: FSMContext, session: Asy
         role=UserRole.STAGER
     )
     
-    session.add(new_user)
-    await session.commit()
-    
-    await message.answer(
-        "✅ **Ro'yxatdan o'tish yakunlandi!**\n\n"
-        "Sizga 'Stajer' maqomi berildi. O'qishni boshlashingiz mumkin.",
-        reply_markup=get_main_menu(UserRole.STAGER),
-        parse_mode="Markdown"
-    )
-    await schedule_onboarding(message.bot, message.from_user.id)
-    await state.clear()
+    try:
+        session.add(new_user)
+        await session.commit()
+        logger.info(f"✅ Yangi xodim ro'yxatdan o'tdi: {new_user.full_name} (ID: {new_user.id})")
+        
+        await message.answer(
+            "✅ **Ro'yxatdan o'tish muvaffaqiyatli yakunlandi!**\n\n"
+            "Sizga 'Stajer' maqomi berildi. Akademiyada o'qishni boshlashingiz mumkin.",
+            reply_markup=get_main_menu(UserRole.STAGER),
+            parse_mode="Markdown"
+        )
+        await schedule_onboarding(message.bot, message.from_user.id)
+    except Exception as e:
+        await session.rollback()
+        logger.error(f"❌ DATABASE ERROR: {e}")
+        await message.answer(
+            "❌ **Ma'lumotlarni saqlashda xatolik!**\n\n"
+            "Ehtimol ma'lumotlar bazasi eskirgan. Iltimos, admin bilan bog'laning yoki bir necha daqiqadan so'ng `/start` ni qayta bosing.",
+            parse_mode="Markdown"
+        )
+    finally:
+        await state.clear()
