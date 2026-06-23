@@ -2,24 +2,33 @@ import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from database.models import Base
-import ssl
+from urllib.parse import urlparse, urlunparse
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Neon/PostgreSQL uchun SSL sozlamalarini to'g'rilash
-if DATABASE_URL and "sslmode=require" in DATABASE_URL:
-    # asyncpg uchun ba'zi parametrlarni tozalash (agar ular xalaqit bersa)
-    DATABASE_URL = DATABASE_URL.replace("channel_binding=require", "")
-    # Agar URL postgresql:// bilan boshlansa, uni postgresql+asyncpg:// ga o'zgartirish
-    if DATABASE_URL.startswith("postgresql://"):
-        DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+def get_clean_url(url: str) -> str:
+    if not url:
+        return url
+    
+    # 1. Protokolni to'g'irlash
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    elif not url.startswith("postgresql+asyncpg://"):
+        url = "postgresql+asyncpg://" + url.split("://")[-1]
+
+    # 2. Xalaqit beruvchi query parametrlarni o'chirish (sslmode, channel_binding)
+    parsed = urlparse(url)
+    clean_url = urlunparse(parsed._replace(query=""))
+    return clean_url
+
+CLEAN_DB_URL = get_clean_url(DATABASE_URL)
 
 engine = create_async_engine(
-    DATABASE_URL,
+    CLEAN_DB_URL,
     echo=False,
     connect_args={
-        "ssl": True
-    } if "sslmode=require" in DATABASE_URL else {}
+        "ssl": True # Neon uchun SSL majburiy
+    }
 )
 
 async_session = sessionmaker(
@@ -28,5 +37,4 @@ async_session = sessionmaker(
 
 async def init_db():
     async with engine.begin() as conn:
-        # Jadvallarni yaratish
         await conn.run_sync(Base.metadata.create_all)
