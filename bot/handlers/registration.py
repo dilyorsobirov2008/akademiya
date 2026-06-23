@@ -118,9 +118,10 @@ async def process_mentor(message: types.Message, state: FSMContext, session: Asy
     )
     
     try:
-        session.add(new_user)
+        # session.merge xatoni oldini oladi: agar foydalanuvchi bazada bo'lsa yangilaydi, bo'lmasa qo'shadi
+        await session.merge(new_user)
         await session.commit()
-        logger.info(f"✅ Yangi xodim ro'yxatdan o'tdi: {new_user.full_name} (ID: {new_user.id})")
+        logger.info(f"✅ Xodim ma'lumotlari saqlandi: {new_user.full_name}")
         
         await message.answer(
             "✅ **Ro'yxatdan o'tish muvaffaqiyatli yakunlandi!**\n\n"
@@ -131,11 +132,10 @@ async def process_mentor(message: types.Message, state: FSMContext, session: Asy
         await schedule_onboarding(message.bot, message.from_user.id)
     except Exception as e:
         await session.rollback()
-        error_msg = str(e)
-        logger.error(f"❌ DATABASE ERROR: {error_msg}")
+        logger.error(f"❌ DATABASE ERROR: {e}")
         await message.answer(
-            f"❌ **DB Xatoligi:**\n`{error_msg[:100]}`\n\n"
-            "Iltimos, ushbu xatoni skrinshot qilib menga tashlang.",
+            "❌ **Xatolik yuz berdi!**\n\n"
+            "Iltimos, bir ozdan so'ng `/start` buyrug'ini qayta yuboring.",
             parse_mode="Markdown"
         )
     finally:
