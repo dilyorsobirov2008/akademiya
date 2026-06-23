@@ -1,0 +1,8 @@
+aiogram
+sqlalchemy
+asyncpg
+python-dotenv
+apscheduler
+pandas
+openpyxl
+pytz
