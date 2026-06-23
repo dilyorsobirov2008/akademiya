@@ -10,6 +10,13 @@ from datetime import datetime
 
 router = Router()
 
+def is_valid_date(date_str: str) -> bool:
+    try:
+        datetime.strptime(date_str, '%d.%m.%Y')
+        return True
+    except ValueError:
+        return False
+
 def get_contact_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="📱 Telefon raqamni yuborish", request_contact=True)]],
@@ -57,8 +64,8 @@ async def process_phone(message: types.Message, state: FSMContext):
 
 @router.message(Registration.dob)
 async def process_dob(message: types.Message, state: FSMContext):
-    if not re.match(r'^\d{2}\.\d{2}\.\d{4}$', message.text):
-        await message.answer("❌ Noto'g'ri format. KK.OO.YYYY formatida yozing.")
+    if not is_valid_date(message.text):
+        await message.answer("❌ Noto'g'ri sana kiritildi yoki kalendar bo'yicha bunday kun yo'q. Iltimos, KK.OO.YYYY formatida qayta kiriting (Masalan: 15.05.1995):")
         return
     
     await state.update_data(dob=message.text)
@@ -99,8 +106,8 @@ async def process_position(message: types.Message, state: FSMContext):
 
 @router.message(Registration.hire_date)
 async def process_hire_date(message: types.Message, state: FSMContext):
-    if not re.match(r'^\d{2}\.\d{2}\.\d{4}$', message.text):
-        await message.answer("❌ Noto'g'ri format. KK.OO.YYYY formatida yozing.")
+    if not is_valid_date(message.text):
+        await message.answer("❌ Noto'g'ri sana kiritildi. KK.OO.YYYY formatida yozing (Masalan: 01.01.2024):")
         return
     
     await state.update_data(hire_date=message.text)
@@ -132,21 +139,26 @@ async def process_mentor(message: types.Message, state: FSMContext, session: Asy
         hire_date = datetime.now().date()
 
     # Save to DB
-    new_user = User(
-        id=message.from_user.id,
-        full_name=data['full_name'],
-        phone=data['phone'],
-        dob=dob_date,
-        branch=data['branch'],
-        department=data['department'],
-        position=data['position'],
-        hire_date=hire_date,
-        manager_name=data['manager'],
-        role=UserRole.TRAINEE
-    )
-    
-    session.add(new_user)
-    await session.commit()
+    try:
+        new_user = User(
+            id=message.from_user.id,
+            full_name=data['full_name'],
+            phone=data['phone'],
+            dob=dob_date,
+            branch=data['branch'],
+            department=data['department'],
+            position=data['position'],
+            hire_date=hire_date,
+            manager_name=data['manager'],
+            role=UserRole.TRAINEE
+        )
+        
+        session.add(new_user)
+        await session.commit()
+    except Exception as e:
+        await session.rollback()
+        await message.answer("❌ Ma'lumotlarni saqlashda xatolik yuz berdi. Iltimos, keyinroq urinib ko'ring yoki admin bilan bog'laning.")
+        return
 
     await message.answer(
         "✅ **Tabriklayman!**\n\n"
