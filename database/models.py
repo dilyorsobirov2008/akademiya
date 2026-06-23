@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, BigInteger, String, Date, ForeignKey, Enum, Float, Boolean, DateTime, Text
+from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Enum, Boolean, Integer, Float, Date
 from sqlalchemy.orm import relationship, declarative_base
 from datetime import datetime
 import enum
@@ -6,127 +6,111 @@ import enum
 Base = declarative_base()
 
 class UserRole(enum.Enum):
-    TRAINEE = "stajer"
-    EMPLOYEE = "xodim"
+    STAGER = "stager"
+    EMPLOYEE = "employee"
     MENTOR = "mentor"
-    BRANCH_MANAGER = "filial_rahbari"
+    BRANCH_MANAGER = "branch_manager"
     HR = "hr"
     ADMIN = "admin"
-    DIRECTOR = "direktor"
+    DIRECTOR = "director"
+
+class CertificateLevel(enum.Enum):
+    BRONZE = "bronze"
+    SILVER = "silver"
+    GOLD = "gold"
 
 class User(Base):
-    __tablename__ = 'users'
-    
-    id = Column(BigInteger, primary_key=True)  # Telegram ID (can be large)
-    full_name = Column(String(255))
-    phone = Column(String(20))
-    dob = Column(Date, nullable=True)
-    branch = Column(String(100))
-    department = Column(String(100))
-    position = Column(String(100))
-    hire_date = Column(Date, nullable=True)
-    manager_name = Column(String(255))
-    mentor_name = Column(String(255), nullable=True)
-    role = Column(Enum(UserRole), default=UserRole.TRAINEE)
+    __tablename__ = "users"
+
+    id = Column(BigInteger, primary_key=True) # Telegram ID
+    username = Column(String, nullable=True)
+    full_name = Column(String)
+    phone = Column(String)
+    birth_date = Column(Date, nullable=True)
+    branch = Column(String)
+    department = Column(String)
+    position = Column(String)
+    hire_date = Column(Date, default=datetime.utcnow)
+    manager_name = Column(String, nullable=True)
+    mentor_name = Column(String, nullable=True)
+    role = Column(Enum(UserRole), default=UserRole.STAGER)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     # Relationships
-    results = relationship("TestResult", back_populates="user")
+    test_results = relationship("TestResult", back_populates="user")
     certificates = relationship("Certificate", back_populates="user")
-    course_progress = relationship("CourseProgress", back_populates="user")
+    progress = relationship("CourseProgress", back_populates="user")
 
 class Course(Base):
-    __tablename__ = 'courses'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    title = Column(String(255))
-    description = Column(Text, nullable=True)
-    category = Column(String(100))  # onboarding, sotuv, kassir, ombor, undiruv, liderlik
-    order_num = Column(Integer, default=0)
+    __tablename__ = "courses"
+    id = Column(Integer, primary_key=True)
+    title = Column(String)
+    description = Column(String)
+    category = Column(String) # Umumiy, Sotuv, Kassa, Ombor, Undiruv, Liderlik
     is_active = Column(Boolean, default=True)
-    
-    lessons = relationship("Lesson", back_populates="course", order_by="Lesson.order_num")
+
+    lessons = relationship("Lesson", back_populates="course")
     tests = relationship("Test", back_populates="course")
 
 class Lesson(Base):
-    __tablename__ = 'lessons'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    course_id = Column(Integer, ForeignKey('courses.id'))
-    title = Column(String(255))
-    content_type = Column(String(50))  # video, pdf, audio, text, checklist
-    content_url = Column(String(500), nullable=True)
-    content_text = Column(Text, nullable=True)
-    order_num = Column(Integer, default=0)
-    
+    __tablename__ = "lessons"
+    id = Column(Integer, primary_key=True)
+    course_id = Column(Integer, ForeignKey("courses.id"))
+    title = Column(String)
+    content_type = Column(String) # Video, PDF, Text, etc.
+    content_url = Column(String)
+    order = Column(Integer)
+
     course = relationship("Course", back_populates="lessons")
 
 class Test(Base):
-    __tablename__ = 'tests'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    course_id = Column(Integer, ForeignKey('courses.id'))
-    title = Column(String(255))
-    min_score = Column(Integer, default=80)
-    
+    __tablename__ = "tests"
+    id = Column(Integer, primary_key=True)
+    course_id = Column(Integer, ForeignKey("courses.id"))
+    title = Column(String)
+    min_score = Column(Integer, default=80) # 80%+ o'tdi
+
     course = relationship("Course", back_populates="tests")
-    questions = relationship("Question", back_populates="test", order_by="Question.order_num")
+    questions = relationship("Question", back_populates="test")
 
 class Question(Base):
-    __tablename__ = 'questions'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    test_id = Column(Integer, ForeignKey('tests.id'))
-    text = Column(Text)
-    q_type = Column(String(50))  # single, multi, case
-    options = Column(Text)  # JSON string: ["variant1", "variant2", ...]
-    correct_answer = Column(String(500))  # For single: "A", for multi: "A,C"
-    order_num = Column(Integer, default=0)
-    
+    __tablename__ = "questions"
+    id = Column(Integer, primary_key=True)
+    test_id = Column(Integer, ForeignKey("tests.id"))
+    text = Column(String)
+    options = Column(String) # JSON string: ["A", "B", "C"]
+    correct_option = Column(String)
+
     test = relationship("Test", back_populates="questions")
 
 class TestResult(Base):
-    __tablename__ = 'test_results'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(BigInteger, ForeignKey('users.id'))
-    test_id = Column(Integer, ForeignKey('tests.id'))
-    score = Column(Float)
-    status = Column(String(50))  # passed, retake, restudy
-    completed_at = Column(DateTime, default=datetime.utcnow)
-    
-    user = relationship("User", back_populates="results")
+    __tablename__ = "test_results"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, ForeignKey("users.id"))
+    test_id = Column(Integer, ForeignKey("tests.id"))
+    score = Column(Integer)
+    is_passed = Column(Boolean)
+    finished_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="test_results")
 
 class Certificate(Base):
-    __tablename__ = 'certificates'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(BigInteger, ForeignKey('users.id'))
-    course_id = Column(Integer, ForeignKey('courses.id'))
-    level = Column(String(50))  # gold, silver, bronze
+    __tablename__ = "certificates"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, ForeignKey("users.id"))
+    course_id = Column(Integer, ForeignKey("courses.id"))
+    level = Column(Enum(CertificateLevel)) # Bronze, Silver, Gold
     issued_at = Column(DateTime, default=datetime.utcnow)
-    
+
     user = relationship("User", back_populates="certificates")
 
 class CourseProgress(Base):
-    __tablename__ = 'course_progress'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(BigInteger, ForeignKey('users.id'))
-    course_id = Column(Integer, ForeignKey('courses.id'))
+    __tablename__ = "course_progress"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, ForeignKey("users.id"))
+    course_id = Column(Integer, ForeignKey("courses.id"))
     completed_lessons = Column(Integer, default=0)
-    total_lessons = Column(Integer, default=0)
-    started_at = Column(DateTime, default=datetime.utcnow)
-    completed_at = Column(DateTime, nullable=True)
-    
-    user = relationship("User", back_populates="course_progress")
+    is_finished = Column(Boolean, default=False)
 
-class Notification(Base):
-    __tablename__ = 'notifications'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(BigInteger, ForeignKey('users.id'))
-    message = Column(Text)
-    is_read = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    user = relationship("User", back_populates="progress")

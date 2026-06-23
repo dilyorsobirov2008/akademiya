@@ -4,36 +4,53 @@ from datetime import datetime, timedelta
 import logging
 
 scheduler = AsyncIOScheduler()
+logger = logging.getLogger(__name__)
 
 async def send_onboarding_reminder(bot: Bot, user_id: int, day: int):
     messages = {
-        1: "🌟 **Xush kelibsiz!** Bugun sizning 1-kuningiz.\n\n"
-           "Kompaniya haqida, missiyamiz va qadriyatlarimiz bilan tanishib chiqing.\n"
-           "📚 **Bilimlar bazasi** -> **Onboarding** bo'limiga kiring.",
-        3: "📅 **3-bugun!**\n\n"
-           "Bugun bo'limingiz bilan tanishuv va xizmat standartlarini o'rganish vaqti keldi.\n"
-           "Lavozim yo'riqnomasi sizni kutmoqda!",
-        7: "🚀 **1 hafta o'tdi!**\n\n"
-           "Birinchi amaliy topshiriqlarni bajarish va test topshirish vaqti keldi.",
-        30: "🎓 **30 kun!**\n\n"
-            "Yakuniy sertifikatsiya vaqtiga yetib keldik. Omad tilaymiz!"
+        1: (
+            "🌟 **1-kun: Onboarding boshlandi!**\n\n"
+            "Bugun siz kompaniyamiz bilan tanishasiz:\n"
+            "• Kompaniya haqida umumiy ma'lumot\n"
+            "• Bizning missiyamiz va qadriyatlarimiz\n"
+            "• Ichki tartib qoidalar\n"
+            "• Kniga Novichka (PDF)\n\n"
+            "📚 Ma'lumotlarni 'Bilimlar bazasi' bo'limidan topishingiz mumkin."
+        ),
+        3: (
+            "📂 **3-kun: Bo'lim bilan tanishuv**\n\n"
+            "Bugungi rejangiz:\n"
+            "• Bo'lim tuzilishi\n"
+            "• Lavozim yo'riqnomasi\n"
+            "• Xizmat standartlari bilan tanishish"
+        ),
+        7: (
+            "📝 **7-kun: Birinchi sinov**\n\n"
+            "Bugun siz amaliy topshiriqlarni bajarasiz va birinchi testdan o'tasiz.\n"
+            "Tayyor bo'lsangiz 'Testlar' bo'limiga kiring!"
+        ),
+        30: (
+            "🏅 **30-kun: Yakuniy sertifikatsiya**\n\n"
+            "Sizning adaptatsiya muddatingiz yakuniga yetdi.\n"
+            "Bugun yakuniy sertifikatsiya testi va mentor baholashidan o'tasiz."
+        )
     }
     
-    text = messages.get(day, "O'qitish eslatmasi!")
-    try:
-        await bot.send_message(user_id, text, parse_mode="Markdown")
-    except Exception as e:
-        logging.error(f"Failed to send reminder to {user_id}: {e}")
+    if day in messages:
+        try:
+            await bot.send_message(user_id, messages[day], parse_mode="Markdown")
+        except Exception as e:
+            logger.error(f"Reminder error Day {day} for {user_id}: {e}")
 
-def schedule_onboarding(bot: Bot, user_id: int):
-    # Schedule for Day 1 (immediate or later), Day 3, 7, 30
-    now = datetime.now()
-    
-    # Day 1
-    scheduler.add_job(send_onboarding_reminder, 'date', run_date=now + timedelta(minutes=1), args=[bot, user_id, 1])
-    # Day 3
-    scheduler.add_job(send_onboarding_reminder, 'date', run_date=now + timedelta(days=3), args=[bot, user_id, 3])
-    # Day 7
-    scheduler.add_job(send_onboarding_reminder, 'date', run_date=now + timedelta(days=7), args=[bot, user_id, 7])
-    # Day 30
-    scheduler.add_job(send_onboarding_reminder, 'date', run_date=now + timedelta(days=30), args=[bot, user_id, 30])
+async def schedule_onboarding(bot: Bot, user_id: int):
+    # Schedule for Day 1, 3, 7, 30
+    days = [1, 3, 7, 30]
+    for day in days:
+        run_date = datetime.now() + timedelta(days=day-1 if day > 1 else 0, minutes=1) # Simplified for testing: Day 1 is immediate
+        scheduler.add_job(
+            send_onboarding_reminder,
+            'date',
+            run_date=run_date,
+            args=[bot, user_id, day],
+            id=f"onboarding_{user_id}_{day}"
+        )
