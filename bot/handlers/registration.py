@@ -131,10 +131,11 @@ async def process_mentor(message: types.Message, state: FSMContext, session: Asy
         await schedule_onboarding(message.bot, message.from_user.id)
     except Exception as e:
         await session.rollback()
-        logger.error(f"❌ DATABASE ERROR: {e}")
+        error_msg = str(e)
+        logger.error(f"❌ DATABASE ERROR: {error_msg}")
         await message.answer(
-            "❌ **Ma'lumotlarni saqlashda xatolik!**\n\n"
-            "Ehtimol ma'lumotlar bazasi eskirgan. Iltimos, admin bilan bog'laning yoki bir necha daqiqadan so'ng `/start` ni qayta bosing.",
+            f"❌ **DB Xatoligi:**\n`{error_msg[:100]}`\n\n"
+            "Iltimos, ushbu xatoni skrinshot qilib menga tashlang.",
             parse_mode="Markdown"
         )
     finally:
