@@ -3,45 +3,75 @@ import asyncio
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from database.models import User, TestResult, UserRole
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from database.models import User, TestResult
 from sqlalchemy import select, func
 from bot.utils.reporting import export_users_to_excel
-from aiogram.types import FSInputFile, ReplyKeyboardRemove
+from aiogram.types import FSInputFile
 import os
 import logging
 
 router = Router()
 logger = logging.getLogger(__name__)
 
-# Hardcoded Admin IDs for security
-ADMIN_IDS = [6339752659, 7351189083] # Asosiy admin ID-lari
+# Hardcoded Admin Credentials
+ADMIN_USERNAME = "feruza11"
+ADMIN_PASSWORD = "1234"
 
 class AdminStates(StatesGroup):
+    waiting_for_username = State()
+    waiting_for_password = State()
     waiting_for_broadcast = State()
+    is_logged_in = State() # persistent state for logged in admins
 
-# Admin check decorator (internal)
-def is_admin(user_id: int):
-    return user_id in ADMIN_IDS
+def get_admin_keyboard():
+    keyboard = [
+        [KeyboardButton(text="📊 Statistika"), KeyboardButton(text="👥 Xodimlar (Excel)")],
+        [KeyboardButton(text="📢 Xabar yuborish"), KeyboardButton(text="🚪 Chiqish")]
+    ]
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 @router.message(Command("admin"))
-async def admin_panel(message: types.Message):
-    if not is_admin(message.from_user.id):
+async def admin_panel_start(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    # Check session
+    if data.get("admin_logged_in"):
+        await message.answer(
+            "🛠 **Admin Paneli**\n\n"
+            "Kerakli bo'limni tanlang:",
+            reply_markup=get_admin_keyboard(),
+            parse_mode="Markdown"
+        )
         return
 
-    await message.answer(
-        "🛠 **Admin Paneli**\n\n"
-        "📊 /stats - Umumiy statistika\n"
-        "📢 /broadcast - Barcha xodimlarga xabar yuborish\n"
-        "👥 /users - Xodimlar ro'yxatini (Excel) yuklab olish\n"
-        "🏠 /start - Asosiy menyunga qaytish",
-        parse_mode="Markdown"
-    )
+    # Start login process
+    await message.answer("🔑 **Admin Panelga kirish**\n\nLogin (Username) kiriting:", reply_markup=ReplyKeyboardRemove())
+    await state.set_state(AdminStates.waiting_for_username)
 
-@router.message(Command("stats"))
+@router.message(AdminStates.waiting_for_username)
+async def process_admin_username(message: types.Message, state: FSMContext):
+    if message.text == ADMIN_USERNAME:
+        await message.answer("✅ Username to'g'ri. Endi parolni kiriting:")
+        await state.set_state(AdminStates.waiting_for_password)
+    else:
+        await message.answer("❌ Login yoki parol noto'g'ri. Qaytadan urinib ko'ring.\n\nLogin (Username) kiriting:")
+        await state.set_state(AdminStates.waiting_for_username)
+
+@router.message(AdminStates.waiting_for_password)
+async def process_admin_password(message: types.Message, state: FSMContext):
+    if message.text == ADMIN_PASSWORD:
+        await state.update_data(admin_logged_in=True)
+        await message.answer(
+            "✅ Muvaffaqiyatli kirdingiz!\n\n🛠 **Admin Paneli** ochildi:",
+            reply_markup=get_admin_keyboard()
+        )
+        await state.set_state(AdminStates.is_logged_in)
+    else:
+        await message.answer("❌ Login yoki parol noto'g'ri. Qaytadan urinib ko'ring.\n\nLogin (Username) kiriting:")
+        await state.set_state(AdminStates.waiting_for_username)
+
+@router.message(F.text == "📊 Statistika", AdminStates.is_logged_in)
 async def get_stats(message: types.Message, session):
-    if not is_admin(message.from_user.id):
-        return
-
     # Count users
     stmt_users = select(func.count(User.id))
     result_users = await session.execute(stmt_users)
@@ -52,9 +82,6 @@ async def get_stats(message: types.Message, session):
     result_tests = await session.execute(stmt_tests)
     test_count = result_tests.scalar()
     
-    # Branch stats
-    # (Optional: more complex queries can be added here)
-
     await message.answer(
         "📊 **Akademiya Statistikasi**\n\n"
         f"👥 Umumiy xodimlar: **{user_count}**\n"
@@ -63,62 +90,46 @@ async def get_stats(message: types.Message, session):
         parse_mode="Markdown"
     )
 
-@router.message(Command("users"))
+@router.message(F.text == "👥 Xodimlar (Excel)", AdminStates.is_logged_in)
 async def users_report(message: types.Message, session):
-    if not is_admin(message.from_user.id):
-        return
-
-    status_msg = await message.answer("⏳ Hisobot tayyorlanmoqda, iltimos kuting...")
-    
+    status_msg = await message.answer("⏳ Hisobot tayyorlanmoqda...")
     try:
         file_path = await export_users_to_excel(session)
-        if os.path.exists(file_path):
-            excel_file = FSInputFile(file_path)
-            await message.answer_document(excel_file, caption="👥 Barcha ro'yxatdan o'tgan xodimlar ro'yxati.")
-            # Clean up after sending
-            # os.remove(file_path) 
-        else:
-            await message.answer("❌ Fayl yaratishda xatolik yuz berdi.")
+        excel_file = FSInputFile(file_path)
+        await message.answer_document(excel_file, caption="👥 Xodimlar ro'yxati.")
         await status_msg.delete()
     except Exception as e:
-        logger.error(f"Excel export error: {e}")
-        await message.answer(f"❌ Hisobot tayyorlashda xatolik: {e}")
+        await message.answer(f"❌ Xatolik: {e}")
 
-@router.message(Command("broadcast"))
+@router.message(F.text == "📢 Xabar yuborish", AdminStates.is_logged_in)
 async def start_broadcast(message: types.Message, state: FSMContext):
-    if not is_admin(message.from_user.id):
-        return
-
-    await message.answer(
-        "📢 **Xabar yuborish bo'limi**\n\n"
-        "Barcha xodimlarga yubormoqchi bo'lgan xabaringizni yozing.\n"
-        "Bekor qilish uchun /cancel deb yozing.",
-        parse_mode="Markdown"
-    )
+    await message.answer("📢 Xabar matnini kiriting (Bekor qilish uchun /cancel):")
     await state.set_state(AdminStates.waiting_for_broadcast)
 
 @router.message(AdminStates.waiting_for_broadcast)
 async def process_broadcast(message: types.Message, state: FSMContext, session):
     if message.text == "/cancel":
-        await message.answer("❌ Xabar yuborish bekor qilindi.")
-        await state.clear()
+        await message.answer("❌ Bekor qilindi.", reply_markup=get_admin_keyboard())
+        await state.set_state(AdminStates.is_logged_in)
         return
 
-    # Fetch all user IDs
-    stmt = select(User.id).where(User.is_active == True)
+    stmt = select(User.id)
     result = await session.execute(stmt)
     user_ids = result.scalars().all()
 
-    count = 0
-    await message.answer(f"⏳ {len(user_ids)} ta foydalanuvchiga xabar yuborilmoqda...")
-
-    for user_id in user_ids:
+    sent = 0
+    await message.answer(f"⏳ {len(user_ids)} ta odamga yuborilmoqda...")
+    for uid in user_ids:
         try:
-            await message.bot.send_message(user_id, message.text)
-            count += 1
-            await asyncio.sleep(0.05) # Rate limiting
-        except Exception:
-            continue
+            await message.bot.send_message(uid, message.text)
+            sent += 1
+            await asyncio.sleep(0.05)
+        except: continue
 
-    await message.answer(f"✅ Xabar muvaffaqiyatli yuborildi! ({count}/{len(user_ids)})")
+    await message.answer(f"✅ Yuborildi: {sent}/{len(user_ids)}", reply_markup=get_admin_keyboard())
+    await state.set_state(AdminStates.is_logged_in)
+
+@router.message(F.text == "🚪 Chiqish", AdminStates.is_logged_in)
+async def admin_logout(message: types.Message, state: FSMContext):
     await state.clear()
+    await message.answer("🚪 Sessiya tugatildi. Admin panelga qayta kirish uchun /admin yozing.", reply_markup=ReplyKeyboardRemove())
