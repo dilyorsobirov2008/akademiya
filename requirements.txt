@@ -1,6 +1,7 @@
 aiogram
 sqlalchemy
 asyncpg
+aiohttp
 python-dotenv
 apscheduler
 pandas

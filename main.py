@@ -3,6 +3,9 @@ import logging
 import os
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.webhook.urls import TokenObjectURL
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiohttp import web
 from dotenv import load_dotenv
 
 from bot.handlers.registration import router as registration_router
@@ -31,9 +34,32 @@ async def main():
     # Start scheduler
     scheduler.start()
     
-    # Start polling
-    logging.info("Bot started...")
-    await dp.start_polling(bot)
+    # Check if we should use webhooks or polling
+    webhook_url = os.getenv("WEBHOOK_URL")
+    
+    if webhook_url:
+        # Webhook mode
+        host = os.getenv("WEB_SERVER_HOST", "0.0.0.0")
+        port = int(os.getenv("WEB_SERVER_PORT", 8080))
+        
+        await bot.set_webhook(url=webhook_url)
+        
+        app = web.Application()
+        SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
+        setup_application(app, dp, bot=bot)
+        
+        logging.info(f"Bot started on webhooks: {webhook_url}")
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, host, port)
+        await site.start()
+        
+        # Keep the bot running
+        await asyncio.Event().wait()
+    else:
+        # Polling mode (default)
+        logging.info("Bot started on polling...")
+        await dp.start_polling(bot)
 
 if __name__ == "__main__":
     try:
