@@ -23,60 +23,68 @@ async def main():
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
     )
     
-    # Register Middlewares
-    dp.update.middleware(DbSessionMiddleware(session_pool=async_session))
-    
-    # Global Error Handler
-    @dp.error()
-    async def global_error_handler(event: types.ErrorEvent):
-        logging.error(f"Critical error: {event.exception}", exc_info=True)
-        # You could notify admins here
-    
-    bot = Bot(token=os.getenv("BOT_TOKEN"))
-    dp = Dispatcher(storage=MemoryStorage())
-    
-    # Register routers
-    dp.include_router(registration_router)
-    dp.include_router(menu_router)
-    dp.include_router(profile_router)
-    dp.include_router(admin_router)
-    
-    # Set bot commands
-    await bot.set_my_commands([
-        types.BotCommand(command="start", description="Botni qayta ishga tushirish"),
-        types.BotCommand(command="help", description="Yordam va qo'llanma")
-    ])
-    
-    # Start scheduler
-    scheduler.start()
-    
-    # Check if we should use webhooks or polling
-    webhook_url = os.getenv("WEBHOOK_URL")
-    
-    if webhook_url:
-        # Webhook mode
-        host = os.getenv("WEB_SERVER_HOST", "0.0.0.0")
-        # Render provides 'PORT' env var, we check both
-        port = int(os.getenv("PORT", os.getenv("WEB_SERVER_PORT", 8080)))
+    token = os.getenv("BOT_TOKEN")
+    if not token:
+        logging.critical("BOT_TOKEN topilmadi! .env faylini tekshiring.")
+        return
+
+    try:
+        bot = Bot(token=token)
+        dp = Dispatcher(storage=MemoryStorage())
+
+        # Register Middlewares
+        dp.update.middleware(DbSessionMiddleware(session_pool=async_session))
         
-        await bot.set_webhook(url=webhook_url)
+        # Global Error Handler
+        @dp.error()
+        async def global_error_handler(event: types.ErrorEvent):
+            logging.error(f"Critical error: {event.exception}", exc_info=True)
         
-        app = web.Application()
-        SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
-        setup_application(app, dp, bot=bot)
+        # Register routers
+        dp.include_router(registration_router)
+        dp.include_router(menu_router)
+        dp.include_router(profile_router)
+        dp.include_router(admin_router)
         
-        logging.info(f"Bot started on webhooks: {webhook_url}")
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, host, port)
-        await site.start()
+        # Set bot commands
+        await bot.set_my_commands([
+            types.BotCommand(command="start", description="Botni qayta ishga tushirish"),
+            types.BotCommand(command="help", description="Yordam va qo'llanma")
+        ])
         
-        # Keep the bot running
-        await asyncio.Event().wait()
-    else:
-        # Polling mode (default)
-        logging.info("Bot started on polling...")
-        await dp.start_polling(bot)
+        # Start scheduler
+        scheduler.start()
+        
+        # Check if we should use webhooks or polling
+        webhook_url = os.getenv("WEBHOOK_URL")
+        
+        if webhook_url:
+            # Webhook mode
+            host = os.getenv("WEB_SERVER_HOST", "0.0.0.0")
+            # Render provides 'PORT' env var, we check both
+            port = int(os.getenv("PORT", os.getenv("WEB_SERVER_PORT", 8080)))
+            
+            await bot.set_webhook(url=webhook_url)
+            
+            app = web.Application()
+            SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path="/webhook")
+            setup_application(app, dp, bot=bot)
+            
+            logging.info(f"Bot started on webhooks: {webhook_url}")
+            runner = web.AppRunner(app)
+            await runner.setup()
+            site = web.TCPSite(runner, host, port)
+            await site.start()
+            
+            # Keep the bot running
+            await asyncio.Event().wait()
+        else:
+            # Polling mode (default)
+            logging.info("Bot started on polling...")
+            await dp.start_polling(bot)
+            
+    except Exception as e:
+        logging.critical(f"Botni ishga tushirishda xatolik: {e}", exc_info=True)
 
 if __name__ == "__main__":
     try:
