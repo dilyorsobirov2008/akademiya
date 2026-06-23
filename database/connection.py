@@ -7,6 +7,13 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+if not DATABASE_URL:
+    # Instead of crashing at module import, we log and handle it
+    print("CRITICAL: DATABASE_URL environment variable is missing!")
+    # We can use a dummy URL for the engine to avoid module-level crash if its being imported for other purposes
+    # but the real fix is setting the environment variable.
+    DATABASE_URL = "postgresql+asyncpg://dummy:dummy@localhost/dummy" 
+
 engine = create_async_engine(DATABASE_URL, echo=True)
 async_session = sessionmaker(
     engine, class_=AsyncSession, expire_on_commit=False
