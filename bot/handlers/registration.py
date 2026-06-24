@@ -1,5 +1,5 @@
 from aiogram import Router, types, F
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,8 +23,9 @@ class Registration(StatesGroup):
     waiting_for_manager = State()
     waiting_for_mentor = State()
 
-@router.message(CommandStart())
+@router.message(CommandStart(), StateFilter("*"))
 async def cmd_start(message: types.Message, state: FSMContext, db_user: User = None):
+    await state.clear()
     if db_user:
         await message.answer(
             f"👋 Qayta xush kelibsiz, **{db_user.full_name}**!\n"
@@ -34,7 +35,6 @@ async def cmd_start(message: types.Message, state: FSMContext, db_user: User = N
         )
         return
 
-    await state.clear()
     await message.answer(
         "🌟 **Ichki Akademiya botiga xush kelibsiz!**\n\n"
         "Ro'yxatdan o'tish uchun F.I.Sh. (Familiya Ism Sharif) kiriting:"

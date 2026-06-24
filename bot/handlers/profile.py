@@ -1,13 +1,15 @@
 from aiogram import Router, types, F
 from database.models import User
 from sqlalchemy import select
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
+from aiogram.fsm.context import FSMContext
 
 router = Router()
 
-@router.message(Command("profile"))
-@router.message(F.text == "🏅 Karyera yo'li") 
-async def show_profile(message: types.Message, session):
+@router.message(Command("profile"), StateFilter("*"))
+@router.message(F.text == "🏅 Karyera yo'li", StateFilter("*")) 
+async def show_profile(message: types.Message, state: FSMContext, session):
+    await state.clear()
     stmt = select(User).where(User.id == message.from_user.id)
     result = await session.execute(stmt)
     user = result.scalar_one_or_none()

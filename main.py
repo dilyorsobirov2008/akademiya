@@ -51,10 +51,10 @@ async def main():
     from bot.handlers.tests import router as tests_router
 
     dp.include_router(reg_router)
-    dp.include_router(menu_router)
-    dp.include_router(profile_router)
-    dp.include_router(admin_router)
     dp.include_router(tests_router)
+    dp.include_router(profile_router)
+    dp.include_router(menu_router)
+    dp.include_router(admin_router)
 
     # --- Bot Commands ---
     await bot.set_my_commands([

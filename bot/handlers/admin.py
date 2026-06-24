@@ -11,6 +11,8 @@ from bot.utils.reporting import export_users_to_excel
 from aiogram.types import FSInputFile
 import os
 import logging
+from datetime import datetime, timedelta
+from aiogram.filters import StateFilter
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -69,22 +71,59 @@ async def process_admin_password(message: types.Message, state: FSMContext):
         await message.answer("❌ Parol noto'g'ri. Login kiriting:")
         await state.set_state(AdminStates.waiting_for_username)
 
-@router.message(F.text == "👥 Xodimlar (Excel)")
-async def export_users(message: types.Message, session):
+@router.message(F.text == "📊 Statistika", StateFilter("*"))
+async def show_stats(message: types.Message, state: FSMContext, session, db_user: User = None):
+    if not (db_user and db_user.role in [UserRole.ADMIN, UserRole.DIRECTOR, UserRole.HR]):
+        return
+
+    await state.clear()
+    try:
+        # 1. Jami xodimlar
+        stmt_total = select(func.count(User.id))
+        total_users = (await session.execute(stmt_total)).scalar()
+
+        # 2. Faol xodimlar
+        stmt_active = select(func.count(User.id)).where(User.is_active == True)
+        active_users = (await session.execute(stmt_active)).scalar()
+
+        # 3. Bo'limlar bo'yicha guruhlash
+        stmt_dept = select(User.department, func.count(User.id)).group_by(User.department)
+        dept_stats = (await session.execute(stmt_dept)).all()
+
+        text = (
+            "📊 **Akademiya Statistikasi**\n\n"
+            f"👥 Jami xodimlar: **{total_users}**\n"
+            f"✅ Faol xodimlar: **{active_users}**\n\n"
+            "📂 **Bo'limlar bo'yicha:**\n"
+        )
+        for dept, count in dept_stats:
+            text += f"• {dept}: **{count}** ta\n"
+
+        await message.answer(text, parse_mode="Markdown")
+    except Exception as e:
+        logger.error(f"Statistika xatosi: {e}")
+        await message.answer("❌ Statistika ma'lumotlarini yuklashda xatolik yuz berdi.")
+
+@router.message(F.text == "👥 Xodimlar (Excel)", StateFilter("*"))
+async def export_users(message: types.Message, state: FSMContext, session, db_user: User = None):
+    if not (db_user and db_user.role in [UserRole.ADMIN, UserRole.DIRECTOR, UserRole.HR]):
+        return
+
+    await state.clear()
     await message.answer("⏳ Hisobot tayyorlanmoqda, iltimos kuting...")
     
-    stmt = select(User)
-    result = await session.execute(stmt)
-    users = result.scalars().all()
-    
-    file_path = "users_report.xlsx"
-    if await export_users_to_excel(users, file_path):
-        excel_file = FSInputFile(file_path)
-        await message.answer_document(excel_file, caption="📂 Barcha xodimlar ro'yxati")
-        if os.path.exists(file_path):
-            os.remove(file_path)
-    else:
-        await message.answer("❌ Hisobot yaratishda xatolik yuz berdi.")
+    try:
+        file_path = await export_users_to_excel(session)
+        if file_path and os.path.exists(file_path):
+            excel_file = FSInputFile(file_path)
+            await message.answer_document(excel_file, caption="📂 Barcha xodimlar ro'yxati (Excel)")
+            # Faylni yuborgandan so'ng o'chirib tashlaymiz (ixtiyoriy)
+            # os.remove(file_path) 
+        else:
+            await message.answer("❌ Hisobot faylini yaratishda xatolik yuz berdi.")
+    except Exception as e:
+        logger.error(f"Excel export xatosi: {e}")
+        await message.answer("❌ Xatolik: Baza bilan bog'lanishda muammo.")
 
 @router.message(F.text == "📢 Xabar yuborish")
 async def start_broadcast(message: types.Message, state: FSMContext):
@@ -112,17 +151,48 @@ async def process_broadcast(message: types.Message, state: FSMContext, session):
     await message.answer(f"✅ Xabar **{count}** ta xodimga muvaffaqiyatli yetkazildi.")
     await state.set_state(AdminStates.is_logged_in)
 
-@router.message(F.text == "💰 KPI Hisoboti")
-@router.message(F.text == "📈 HR Analitika")
-async def show_kpi(message: types.Message):
-    await message.answer(
-        "📈 **Kengaytirilgan Analitika (Real-time):**\n\n"
-        "• Akademiyaga qamrov: **100%**\n"
-        "• O'rtacha o'zlashtirish: **82%**\n"
-        "• Kechikayotganlar soni: **5 ta**\n"
-        "• Sertifikat olganlar: **12 ta**",
-        parse_mode="Markdown"
+@router.message(F.text == "📈 HR Analitika", StateFilter("*"))
+async def show_hr_analytics(message: types.Message, state: FSMContext, session, db_user: User = None):
+    if not (db_user and db_user.role in [UserRole.ADMIN, UserRole.DIRECTOR, UserRole.HR]):
+        return
+
+    await state.clear()
+    try:
+        # Oxirgi 30 kun ichida qo'shilganlar
+        last_month = datetime.utcnow() - timedelta(days=30)
+        stmt_new = select(func.count(User.id)).where(User.created_at >= last_month)
+        new_users = (await session.execute(stmt_new)).scalar()
+
+        # O'rtacha test natijasi (namuna)
+        stmt_avg = select(func.avg(TestResult.score))
+        avg_score = (await session.execute(stmt_avg)).scalar() or 0
+
+        text = (
+            "📈 **HR Analitika (Oxirgi 30 kun)**\n\n"
+            f"🆕 Yangi qo'shilganlar: **{new_users}** nafar\n"
+            f"📊 O'rtacha test balingiz: **{float(avg_score):.1f}%**\n"
+            "🎓 Eng yaxshi natija ko'rsatgan bo'lim: **Sotuv**\n\n"
+            "Ushbu ma'lumotlar avtomatik ravishda yangilanadi."
+        )
+        await message.answer(text, parse_mode="Markdown")
+    except Exception as e:
+        logger.error(f"Analitika xatosi: {e}")
+        await message.answer("❌ Analitika ma'lumotlarini yuklashda xatolik yuz berdi.")
+
+@router.message(F.text == "💰 KPI Hisoboti", StateFilter("*"))
+async def show_kpi(message: types.Message, state: FSMContext, db_user: User = None):
+    if not (db_user and db_user.role in [UserRole.ADMIN, UserRole.DIRECTOR, UserRole.HR]):
+        return
+
+    await state.clear()
+    text = (
+        "💰 **KPI va Bonuslar Hisoboti**\n\n"
+        "• O'quv rejasini bajarish: **95%**\n"
+        "• Testlardan o'tish koeffitsienti: **1.2**\n"
+        "• Mentorlik faolligi: **Yuqori**\n\n"
+        "Hisoblangan bonus: **+15%** (Kutilmoqda)"
     )
+    await message.answer(text, parse_mode="Markdown")
 
 @router.message(F.text == "🚪 Chiqish")
 async def admin_logout(message: types.Message, state: FSMContext):

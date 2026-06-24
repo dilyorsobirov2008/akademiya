@@ -1,4 +1,5 @@
 from aiogram import Router, types, F
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from database.models import Test, Question, TestResult
@@ -33,8 +34,9 @@ async def show_available_tests(message: types.Message, session):
     text += "\nTestni boshlash uchun tartib raqamini kiriting."
     await message.answer(text, parse_mode="Markdown")
 
-@router.message(F.text == "📋 Baholash natijalari")
-async def show_test_results(message: types.Message, session):
+@router.message(F.text == "📋 Baholash natijalari", StateFilter("*"))
+async def show_test_results(message: types.Message, state: FSMContext, session):
+    await state.clear()
     stmt = select(TestResult).where(TestResult.user_id == message.from_user.id).order_by(TestResult.finished_at.desc())
     result = await session.execute(stmt)
     results = result.scalars().all()

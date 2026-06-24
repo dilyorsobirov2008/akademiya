@@ -40,9 +40,6 @@ async def show_knowledge_base(message: types.Message):
         parse_mode="Markdown"
     )
 
-@router.message(F.text == "📝 Testlar")
-async def redirect_to_tests(message: types.Message):
-    await message.answer("📝 Testlar ro'yxatini ko'rish uchun menyudagi 'Testlar' tugmasini kiriting (yoki /tests xabarini yozing).")
 
 @router.message(F.text == "🏆 Sertifikatlarim")
 async def show_certificates(message: types.Message):
@@ -78,23 +75,3 @@ async def ask_question(message: types.Message):
         parse_mode="Markdown"
     )
 
-@router.message(F.text == "📋 Baholash natijalari")
-async def show_results(message: types.Message, session):
-    stmt = select(TestResult).where(TestResult.user_id == message.from_user.id)
-    result = await session.execute(stmt)
-    results = result.scalars().all()
-    
-    if not results:
-        await message.answer("Sizda hali baholash natijalari mavjud emas.")
-    else:
-        await message.answer(f"Sizda {len(results)} ta test natijasi bor.")
-
-@router.message(F.text == "🏅 Karyera yo'li")
-async def show_career_path(message: types.Message, db_user: User):
-    await message.answer(
-        "🏅 **Karyera yo'li (T.Z.):**\n\n"
-        "Sotuvchi ➡️ Katta sotuvchi ➡️ Supervayzer ➡️ Filial rahbari\n\n"
-        f"Sizning hozirgi holatingiz: **{db_user.position}**\n"
-        "Keyingi bosqich uchun 2 ta kurs va 1 ta test topshirishingiz kerak.",
-        parse_mode="Markdown"
-    )
